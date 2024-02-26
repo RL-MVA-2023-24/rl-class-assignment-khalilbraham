@@ -6,7 +6,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 import os
-import tqdm
 
 env = TimeLimit(
     env=HIVPatient(domain_randomization=False), max_episode_steps=200
@@ -130,7 +129,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 state_dim = env.observation_space.shape[0]
 nb_actions = env.action_space.n
 
-nb_neurons= 24
+nb_neurons= 48
 
 DQN = torch.nn.Sequential(nn.Linear(state_dim, nb_neurons),
                           nn.ReLU(),
@@ -166,7 +165,6 @@ class ProjectAgent:
 
 def fill_buffer(env, agent, buffer_size):
     state, _ = env.reset()
-    progress_bar = tqdm.tqdm(total=buffer_size, desc="Filling the replay buffer")
     for _ in range(buffer_size):
         action = agent.act(state)
         next_state, reward, done, trunc, _ = env.step(action)
@@ -175,8 +173,6 @@ def fill_buffer(env, agent, buffer_size):
             state, _ = env.reset()
         else:
             state = next_state
-        progress_bar.update(1)
-    progress_bar.close()
 
 if __name__ == "__main__":
     # Set the seed
