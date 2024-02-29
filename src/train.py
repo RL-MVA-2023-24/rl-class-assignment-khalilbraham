@@ -8,7 +8,7 @@ import torch.nn as nn
 from copy import deepcopy
 import os
 import pickle 
-
+y
 env = TimeLimit(
     env=HIVPatient(domain_randomization=False), max_episode_steps=200
 )  # The time wrapper limits the number of steps in an episode at 200.
@@ -114,12 +114,6 @@ class DQNAgent:
           with torch.no_grad():
               Q = self.model(torch.Tensor(observation).unsqueeze(0).to( self.device))
               action=torch.argmax(Q).item()
-        else:
-          # Pick a random action
-          action=  self.env.action_space.sample()
-        return action
-          
-
     
     def train(self, env, max_episode):
         episode_return = []
@@ -206,9 +200,9 @@ class DQNAgent:
             pickle.dump(self, f)
         
     def load(self, model_path, target_model_path, optimizer_path):
-        self.model.load_state_dict(torch.load("model_1"))
-        self.target_model.load_state_dict(torch.load("target_model_1"))
-        self.optimizer.load_state_dict(torch.load("optimizer_model_1"))
+        self.model.load_state_dict(torch.load(model_path))
+        self.target_model.load_state_dict(torch.load(target_model_path))
+        self.optimizer.load_state_dict(torch.load(optimizer_path))
 
 
 
@@ -234,10 +228,7 @@ class ProjectAgent:
         pass
         
     def load(self):
-        self.agent = DQNAgent(config, DQN)
-        path = os.getcwd() + "/src/Model"
-        self.agent.model.load_state_dict(torch.load(path, 
-                                                    map_location= torch.device('cpu')))
+        self.agent.model.load("model_1", "target_model_1", "optimizer_model_1")
 
 def fill_buffer(env, agent, buffer_size):
     state, _ = env.reset()
@@ -268,16 +259,3 @@ if __name__ == "__main__":
             'update_target_tau': 0.0005,
             'criterion': torch.nn.SmoothL1Loss(),
             'monitoring_nb_trials': 50}
-    # Set the seed
-    seed = 100
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-
-    agent = DQNAgent(config, DQN)
-
-    print("Filling the buffer")
-    fill_buffer(env, agent, 8000)
-
-    print("Training the agent")
-    ep_length, disc_rewards, tot_rewards, V0 = agent.train(env, 4000)
