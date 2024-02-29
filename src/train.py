@@ -120,17 +120,6 @@ class DQNAgent:
         return action
           
 
-    def save(self, path: str) -> None:
-         torch.save({'model_state_dict': self.model.state_dict()}, path)
-
-    def load(self) -> None:
-        self.config['device'] = 'cpu'
-        base_path = "DQNAgent.pkl"
-        chkpt = torch.load(base_path, map_location=torch.device('cpu'))
-        self.model.load_state_dict(chkpt['model_state_dict'])
-        self.model.to(self.config['device'])
-        self.model.eval()
-        self.target_model =  deepcopy(self.model).to(self.config['device'])  
     
     def train(self, env, max_episode):
         episode_return = []
@@ -169,6 +158,7 @@ class DQNAgent:
                 for key in model_state_dict:
                     target_state_dict[key] = tau*model_state_dict + (1-tau)*target_state_dict
                 self.target_model.load_state_dict(target_state_dict)
+
             # next transition
             step += 1
             if done or trunc:
@@ -203,23 +193,23 @@ class DQNAgent:
             else:
                 state = next_state
 
+            self.save(episode)
+
         return episode_return, MC_avg_discounted_reward, MC_avg_total_reward, V_init_state
 
     def save(self, episode):
         print("Saving model")
-        torch.save(self.model.state_dict(), 'models/model_{:e}'.format(episode))
-        torch.save(self.target_model.state_dict(), 'targets/target_model_{:e}'.format(episode))
-        torch.save(self.optimizer.state_dict(), 'optimizers/optimizer_model_{:e}'.format(episode))
-        with open('agents/agent_{:e}.pkl'.format(episode), 'wb') as f:
+        torch.save(self.model.state_dict(), 'src/models/model_{:e}'.format(episode))
+        torch.save(self.target_model.state_dict(), 'src/targets/target_model_{:e}'.format(episode))
+        torch.save(self.optimizer.state_dict(), 'src/optimizers/optimizer_model_{:e}'.format(episode))
+        with open('src/agents/agent_{:e}.pkl'.format(episode), 'wb') as f:
             pickle.dump(self, f)
         
     def load(self, model_path, target_model_path, optimizer_path):
-        self.model.load_state_dict(torch.load(model_path))
-        self.target_model.load_state_dict(torch.load(target_model_path))
-        self.optimizer.load_state_dict(torch.load(optimizer_path))
-    
-    def act(self, state):
-        return greedy_action(self.model, state)
+        self.model.load_state_dict(torch.load("model_1"))
+        self.target_model.load_state_dict(torch.load("target_model_1"))
+        self.optimizer.load_state_dict(torch.load("optimizer_model_1"))
+
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -273,7 +263,7 @@ if __name__ == "__main__":
             'epsilon_delay_decay': 20,
             'batch_size': 1024,
             'gradient_steps': 10,
-            'update_target_strategy': 'ema', # or 'ema'
+            'update_target_strategy': 'replace', # or 'ema'
             'update_target_freq': 50,
             'update_target_tau': 0.0005,
             'criterion': torch.nn.SmoothL1Loss(),
@@ -286,7 +276,8 @@ if __name__ == "__main__":
 
     agent = DQNAgent(config, DQN)
 
-
+    print("Filling the buffer")
     fill_buffer(env, agent, 8000)
 
+    print("Training the agent")
     ep_length, disc_rewards, tot_rewards, V0 = agent.train(env, 4000)
