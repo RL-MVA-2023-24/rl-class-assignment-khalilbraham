@@ -46,7 +46,7 @@ def greedy_action(network, state):
     
 class DQNAgent:
     def __init__(self, config, model):
-        device = "cuda" if next(model.parameters()).is_cuda else "cpu"
+        device = "cuda" 
         self.nb_actions = config['nb_actions']
         self.gamma = config['gamma'] if 'gamma' in config.keys() else 0.95
         self.batch_size = config['batch_size'] if 'batch_size' in config.keys() else 100
