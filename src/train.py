@@ -220,31 +220,8 @@ DQN = torch.nn.Sequential(nn.Linear(state_dim, nb_neurons),
 
 
 class ProjectAgent:
-    def act(self, observation, use_random=False):
-        # Implement your agent here  
-        return self.agent.act(observation)
-
-    def save(self, path):
-        pass
-        
-    def load(self):
-        self.agent.model.load("model_1", "target_model_1", "optimizer_model_1")
-
-def fill_buffer(env, agent, buffer_size):
-    state, _ = env.reset()
-    for _ in range(buffer_size):
-        action = agent.act(state)
-        next_state, reward, done, trunc, _ = env.step(action)
-        agent.memory.append(state, action, reward, next_state, done)
-        if done or trunc:
-            state, _ = env.reset()
-        else:
-            state = next_state
-
-if __name__ == "__main__":
-
-    # DQN config
-    config = {'nb_actions': nb_actions,
+    def __init__(self):
+        self.config = {'nb_actions': nb_actions,
             'learning_rate': 0.001,
             'gamma': 0.95,
             'buffer_size': 1000000,
@@ -259,3 +236,28 @@ if __name__ == "__main__":
             'update_target_tau': 0.0005,
             'criterion': torch.nn.SmoothL1Loss(),
             'monitoring_nb_trials': 50}
+        
+        self.agent = DQNAgent(env, self.config)
+
+
+    def act(self, observation, use_random=False):
+        # Implement your agent here  
+        return self.agent.act(observation)
+
+    def save(self, path):
+        pass
+        
+    def load(self):
+        self.agent.load("model_1", "target_model_1", "optimizer_model_1")
+
+def fill_buffer(env, agent, buffer_size):
+    state, _ = env.reset()
+    for _ in range(buffer_size):
+        action = agent.act(state)
+        next_state, reward, done, trunc, _ = env.step(action)
+        agent.memory.append(state, action, reward, next_state, done)
+        if done or trunc:
+            state, _ = env.reset()
+        else:
+            state = next_state
+
