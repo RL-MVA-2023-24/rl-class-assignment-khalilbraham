@@ -200,9 +200,9 @@ class DQNAgent:
             pickle.dump(self, f)
         
     def load(self, model_path, target_model_path, optimizer_path):
-        self.model.load_state_dict(torch.load(model_path))
-        self.target_model.load_state_dict(torch.load(target_model_path))
-        self.optimizer.load_state_dict(torch.load(optimizer_path))
+        self.model.load_state_dict(torch.load(model_path,  map_location=torch.device('cpu')))
+        self.target_model.load_state_dict(torch.load(target_model_path,  map_location=torch.device('cpu')))
+        self.optimizer.load_state_dict(torch.load(optimizer_path,  map_location=torch.device('cpu')))
 
 
 
