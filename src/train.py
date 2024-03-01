@@ -46,7 +46,7 @@ def greedy_action(network, state):
     
 class DQNAgent:
     def __init__(self, config, model):
-        device = "cuda" 
+        device = "cuda" if next(model.parameters()).is_cuda else "cpu"
         self.nb_actions = config['nb_actions']
         self.gamma = config['gamma'] if 'gamma' in config.keys() else 0.95
         self.batch_size = config['batch_size'] if 'batch_size' in config.keys() else 100
@@ -221,6 +221,7 @@ DQN = torch.nn.Sequential(nn.Linear(state_dim, nb_neurons),
 
 class ProjectAgent:
     def __init__(self):
+        self.model = DQN
         self.config = {'nb_actions': nb_actions,
             'learning_rate': 0.001,
             'gamma': 0.95,
@@ -237,11 +238,10 @@ class ProjectAgent:
             'criterion': torch.nn.SmoothL1Loss(),
             'monitoring_nb_trials': 50}
         
-        self.agent = DQNAgent(env, self.config)
+        self.agent = DQNAgent(self.config, self.model)
 
 
     def act(self, observation, use_random=False):
-        # Implement your agent here  
         return self.agent.act(observation)
 
     def save(self, path):
