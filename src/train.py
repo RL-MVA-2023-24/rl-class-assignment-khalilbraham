@@ -47,6 +47,7 @@ def greedy_action(network, state):
 class DQNAgent:
     def __init__(self, config, model):
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.device = 'cuda' if torch.cuda.is_available() else 'cpu'
         self.nb_actions = config['nb_actions']
         self.gamma = config['gamma'] if 'gamma' in config.keys() else 0.95
         self.batch_size = config['batch_size'] if 'batch_size' in config.keys() else 100
@@ -108,12 +109,17 @@ class DQNAgent:
             loss.backward()
             self.optimizer.step()         
 
-    def act(self, observation: np.ndarray, use_random: bool = False) -> int:
-        if use_random==False:
-          # Pick an action following the learned policy
-          with torch.no_grad():
-              Q = self.model(torch.Tensor(observation).unsqueeze(0).to( self.device))
-              action=torch.argmax(Q).item()
+    def greedy_action(self, observation):
+        device = "cuda" if next(self.model.parameters()).is_cuda else "cpu"
+        with torch.no_grad():
+            Q = self.model(torch.Tensor(observation).unsqueeze(0).to(device))
+            return torch.argmax(Q).item()
+
+    def act(self, observation, use_random=False):
+        if use_random:
+            return np.random.randint(self.nb_actions)
+        else:
+            return self.greedy_action(observation)
     
     def train(self, env, max_episode):
         episode_return = []
