@@ -6,6 +6,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from copy import deepcopy
+from evaluate import evaluate_HIV, evaluate_HIV_population
 import os
 import pickle 
 
@@ -41,37 +42,18 @@ def greedy_action(network, state):
     
 
 class MLP(nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim, depth=2, activation=nn.ReLU(), normalization='batch', dropout=0.5):
+    def __init__(self, input_dim, hidden_dim, output_dim, depth=2, activation=nn.SiLU(), normalization='batch', dropout=0.5):
         super(MLP, self).__init__()
         self.input_layer = nn.Linear(input_dim, hidden_dim)
         self.hidden_layers = nn.ModuleList([nn.Linear(hidden_dim, hidden_dim) for _ in range(depth - 1)])
         self.output_layer = nn.Linear(hidden_dim, output_dim)
         self.activation = activation
 
-        if normalization == 'batch':
-            self.normalization = nn.BatchNorm1d(hidden_dim)
-        elif normalization == 'layer':
-            self.normalization = nn.LayerNorm(hidden_dim)
-        else:
-            self.normalization = None
-
-        self.dropout = nn.Dropout(dropout)
-
-        # Initialize weights using Kaiming initialization
-        for layer in [self.input_layer] + list(self.hidden_layers) + [self.output_layer]:
-            nn.init.kaiming_uniform_(layer.weight, nonlinearity='relu')
-
     def forward(self, x):
         x = self.activation(self.input_layer(x))
-        if self.normalization is not None:
-            x = self.normalization(x)
-        x = self.dropout(x)
 
         for layer in self.hidden_layers:
             x = self.activation(layer(x))
-            if self.normalization is not None:
-                x = self.normalization(x)
-            x = self.dropout(x)
 
         x = self.output_layer(x)
         return x
@@ -193,13 +175,16 @@ class DQNAgent:
                 model_state_dict = self.model.state_dict()
                 tau = self.update_target_tau
                 for key in model_state_dict:
-                    target_state_dict[key] = tau*model_state_dict + (1-tau)*target_state_dict
+                    target_state_dict[key] = tau*model_state_dict[key] + (1-tau)*target_state_dict[key]
                 self.target_model.load_state_dict(target_state_dict)
 
             # next transition
             step += 1
             if done or trunc:
                 episode += 1
+
+                validation_score = evaluate_HIV(agent=self, nb_episode=1) if episode >= 75 else -1
+
                 # Monitoring
                 if self.monitoring_nb_trials>0:
                     MC_dr, MC_tr = self.MC_eval(env, self.monitoring_nb_trials)    # NEW NEW NEW
@@ -224,6 +209,11 @@ class DQNAgent:
                           ", batch size ", '{:4d}'.format(len(self.memory)), 
                           ", ep return ", '{:4.1f}'.format(episode_cum_reward), 
                           sep='')
+                    
+                if validation_score > best_return:
+                    print('New best policy found')
+                    best_return = validation_score
+                    self.save("model_DQN.pt")
 
                 
                 state, _ = env.reset()
@@ -244,7 +234,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 state_dim = env.observation_space.shape[0]
 nb_actions = env.action_space.n
 
-MLP = MLP(state_dim, 512, nb_actions, depth=5, activation=torch.nn.SiLU(), normalization='None').to(device)
+MLP = MLP(state_dim, 256, nb_actions, depth=5, activation=torch.nn.SiLU(), normalization='None').to(device)
 
 class ProjectAgent:
     def __init__(self):
@@ -254,14 +244,14 @@ class ProjectAgent:
             'gamma': 0.95,
             'buffer_size': 1000000,
             'epsilon_min': 0.01,
-            'epsilon_max': 0.01,
-            'epsilon_decay_period': 40000,
-            'epsilon_delay_decay': 20,
-            'batch_size': 1024,
-            'gradient_steps': 10,
-            'update_target_strategy': 'replace', # or 'ema'
+            'epsilon_max': 1.,
+            'epsilon_decay_period': 5000,
+            'epsilon_delay_decay': 50,
+            'batch_size': 200,
+            'gradient_steps': 2,
+            'update_target_strategy': 'ema', # or 'ema'
             'update_target_freq': 50,
-            'update_target_tau': 0.0005,
+            'update_target_tau': 0.005,
             'criterion': torch.nn.SmoothL1Loss(),
             'monitoring_nb_trials': 50}
         
@@ -275,7 +265,7 @@ class ProjectAgent:
         pass
         
     def load(self):
-        self.agent.load("model_8")
+        self.agent.load("model_DQN.pt")
 
 def fill_buffer(env, agent, buffer_size):
     state, _ = env.reset()
@@ -291,25 +281,20 @@ def fill_buffer(env, agent, buffer_size):
 
 if __name__ == "__main__":
 
-    # Set the seed
-    seed = 42
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
 
     config = {'nb_actions': nb_actions,
             'learning_rate': 0.001,
-            'gamma': 0.98,
+            'gamma': 0.95,
             'buffer_size': 1000000,
             'epsilon_min': 0.01,
             'epsilon_max': 1.,
-            'epsilon_decay_period': 10000,
-            'epsilon_delay_decay': 200,
-            'batch_size': 1024,
+            'epsilon_decay_period': 5000,
+            'epsilon_delay_decay': 50,
+            'batch_size': 200,
             'gradient_steps': 2,
-            'update_target_strategy': 'replace', # or 'ema'
-            'update_target_freq': 100,
-            'update_target_tau': 0.001,
+            'update_target_strategy': 'ema', # or 'ema'
+            'update_target_freq': 50,
+            'update_target_tau': 0.005,
             'criterion': torch.nn.SmoothL1Loss(),
             'monitoring_nb_trials': 50}
 
@@ -319,5 +304,5 @@ if __name__ == "__main__":
     fill_buffer(env, agent, 8000)
 
     print("Training the agent")
-    ep_length, disc_rewards, tot_rewards, V0 = agent.train(env, 4000)
+    ep_length, disc_rewards, tot_rewards, V0 = agent.train(env, 500)
 
