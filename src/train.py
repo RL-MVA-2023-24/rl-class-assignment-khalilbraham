@@ -38,6 +38,43 @@ def greedy_action(network, state):
     with torch.no_grad():
         Q = network(torch.Tensor(state).unsqueeze(0).to(device))
         return torch.argmax(Q).item()
+    
+
+class MLP(nn.Module):
+    def __init__(self, input_dim, hidden_dim, output_dim, depth=2, activation=nn.ReLU(), normalization='batch', dropout=0.5):
+        super(MLP, self).__init__()
+        self.input_layer = nn.Linear(input_dim, hidden_dim)
+        self.hidden_layers = nn.ModuleList([nn.Linear(hidden_dim, hidden_dim) for _ in range(depth - 1)])
+        self.output_layer = nn.Linear(hidden_dim, output_dim)
+        self.activation = activation
+
+        if normalization == 'batch':
+            self.normalization = nn.BatchNorm1d(hidden_dim)
+        elif normalization == 'layer':
+            self.normalization = nn.LayerNorm(hidden_dim)
+        else:
+            self.normalization = None
+
+        self.dropout = nn.Dropout(dropout)
+
+        # Initialize weights using Kaiming initialization
+        for layer in [self.input_layer] + list(self.hidden_layers) + [self.output_layer]:
+            nn.init.kaiming_uniform_(layer.weight, nonlinearity='relu')
+
+    def forward(self, x):
+        x = self.activation(self.input_layer(x))
+        if self.normalization is not None:
+            x = self.normalization(x)
+        x = self.dropout(x)
+
+        for layer in self.hidden_layers:
+            x = self.activation(layer(x))
+            if self.normalization is not None:
+                x = self.normalization(x)
+            x = self.dropout(x)
+
+        x = self.output_layer(x)
+        return x
 
 
 # You have to implement your own agent.
@@ -179,6 +216,7 @@ class DQNAgent:
                           ", MC disc ", '{:6.2f}'.format(MC_dr),
                           ", V0 ", '{:6.2f}'.format(V0),
                           sep='')
+                    self.save(episode)
                 else:
                     episode_return.append(episode_cum_reward)
                     print("Episode ", '{:2d}'.format(episode), 
@@ -193,41 +231,24 @@ class DQNAgent:
             else:
                 state = next_state
 
-            self.save(episode)
-
         return episode_return, MC_avg_discounted_reward, MC_avg_total_reward, V_init_state
 
     def save(self, episode):
-        print("Saving model")
-        torch.save(self.model.state_dict(), 'src/models/model_{:e}'.format(episode))
-        torch.save(self.target_model.state_dict(), 'src/targets/target_model_{:e}'.format(episode))
-        torch.save(self.optimizer.state_dict(), 'src/optimizers/optimizer_model_{:e}'.format(episode))
-        with open('src/agents/agent_{:e}.pkl'.format(episode), 'wb') as f:
-            pickle.dump(self, f)
+        torch.save(self.model.state_dict(), 'src/models/model_{:e}'.format(int(episode)))
         
-    def load(self, model_path, target_model_path, optimizer_path):
+    def load(self, model_path):
         self.model.load_state_dict(torch.load(model_path,  map_location=torch.device('cpu')))
-        self.target_model.load_state_dict(torch.load(target_model_path,  map_location=torch.device('cpu')))
-        self.optimizer.load_state_dict(torch.load(optimizer_path,  map_location=torch.device('cpu')))
-
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 state_dim = env.observation_space.shape[0]
 nb_actions = env.action_space.n
 
-nb_neurons= 48
-
-DQN = torch.nn.Sequential(nn.Linear(state_dim, nb_neurons),
-                        nn.ReLU(),
-                        nn.Linear(nb_neurons, nb_neurons),
-                        nn.ReLU(), 
-                        nn.Linear(nb_neurons, nb_actions)).to(device)
-
+MLP = MLP(state_dim, 512, nb_actions, depth=5, activation=torch.nn.SiLU(), normalization='None').to(device)
 
 class ProjectAgent:
     def __init__(self):
-        self.model = DQN
+        self.model = MLP
         self.config = {'nb_actions': nb_actions,
             'learning_rate': 0.001,
             'gamma': 0.95,
@@ -254,7 +275,7 @@ class ProjectAgent:
         pass
         
     def load(self):
-        self.agent.load("model_1", "target_model_1", "optimizer_model_1")
+        self.agent.load("model_8")
 
 def fill_buffer(env, agent, buffer_size):
     state, _ = env.reset()
@@ -266,4 +287,37 @@ def fill_buffer(env, agent, buffer_size):
             state, _ = env.reset()
         else:
             state = next_state
+
+
+if __name__ == "__main__":
+
+    # Set the seed
+    seed = 42
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+
+    config = {'nb_actions': nb_actions,
+            'learning_rate': 0.001,
+            'gamma': 0.98,
+            'buffer_size': 1000000,
+            'epsilon_min': 0.01,
+            'epsilon_max': 1.,
+            'epsilon_decay_period': 10000,
+            'epsilon_delay_decay': 200,
+            'batch_size': 1024,
+            'gradient_steps': 2,
+            'update_target_strategy': 'replace', # or 'ema'
+            'update_target_freq': 100,
+            'update_target_tau': 0.001,
+            'criterion': torch.nn.SmoothL1Loss(),
+            'monitoring_nb_trials': 50}
+
+    agent = DQNAgent(config, MLP)
+
+    print("Filling the buffer")
+    fill_buffer(env, agent, 8000)
+
+    print("Training the agent")
+    ep_length, disc_rewards, tot_rewards, V0 = agent.train(env, 4000)
 
