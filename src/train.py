@@ -150,6 +150,7 @@ class DQNAgent:
         state, _ = env.reset()
         epsilon = self.epsilon_max
         step = 0
+        best_return = 0
         while episode < max_episode:
             # update epsilon
             if step > self.epsilon_delay:
@@ -183,7 +184,7 @@ class DQNAgent:
             if done or trunc:
                 episode += 1
 
-                validation_score = evaluate_HIV(agent=self, nb_episode=1) if episode >= 75 else -1
+                validation_score = evaluate_HIV(agent=self, nb_episode=1)
 
                 # Monitoring
                 if self.monitoring_nb_trials>0:
@@ -201,7 +202,6 @@ class DQNAgent:
                           ", MC disc ", '{:6.2f}'.format(MC_dr),
                           ", V0 ", '{:6.2f}'.format(V0),
                           sep='')
-                    self.save(episode)
                 else:
                     episode_return.append(episode_cum_reward)
                     print("Episode ", '{:2d}'.format(episode), 
@@ -213,7 +213,7 @@ class DQNAgent:
                 if validation_score > best_return:
                     print('New best policy found')
                     best_return = validation_score
-                    self.save("model_DQN.pt")
+                    self.save(episode)
 
                 
                 state, _ = env.reset()
@@ -224,7 +224,7 @@ class DQNAgent:
         return episode_return, MC_avg_discounted_reward, MC_avg_total_reward, V_init_state
 
     def save(self, episode):
-        torch.save(self.model.state_dict(), 'src/models/model_{:e}'.format(int(episode)))
+        torch.save(self.model.state_dict(), 'src/models/model_{:e}'.format(episode))
         
     def load(self, model_path):
         self.model.load_state_dict(torch.load(model_path,  map_location=torch.device('cpu')))
@@ -234,26 +234,26 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 state_dim = env.observation_space.shape[0]
 nb_actions = env.action_space.n
 
-MLP = MLP(state_dim, 256, nb_actions, depth=5, activation=torch.nn.SiLU(), normalization='None').to(device)
+MLP = MLP(state_dim, 512, nb_actions, depth=5, activation=torch.nn.SiLU(), normalization='None').to(device)
 
 class ProjectAgent:
     def __init__(self):
         self.model = MLP
         self.config = {'nb_actions': nb_actions,
             'learning_rate': 0.001,
-            'gamma': 0.95,
+            'gamma': 0.98,
             'buffer_size': 1000000,
             'epsilon_min': 0.01,
             'epsilon_max': 1.,
-            'epsilon_decay_period': 5000,
-            'epsilon_delay_decay': 50,
-            'batch_size': 200,
+            'epsilon_decay_period': 10000,
+            'epsilon_delay_decay': 400,
+            'batch_size': 1024,
             'gradient_steps': 2,
             'update_target_strategy': 'ema', # or 'ema'
-            'update_target_freq': 50,
+            'update_target_freq': 100,
             'update_target_tau': 0.005,
             'criterion': torch.nn.SmoothL1Loss(),
-            'monitoring_nb_trials': 50}
+            'monitoring_nb_trials': 20}
         
         self.agent = DQNAgent(self.config, self.model)
 
@@ -265,7 +265,7 @@ class ProjectAgent:
         pass
         
     def load(self):
-        self.agent.load("model_DQN.pt")
+        self.agent.load("model_1")
 
 def fill_buffer(env, agent, buffer_size):
     state, _ = env.reset()
@@ -284,25 +284,27 @@ if __name__ == "__main__":
 
     config = {'nb_actions': nb_actions,
             'learning_rate': 0.001,
-            'gamma': 0.95,
+            'gamma': 0.98,
             'buffer_size': 1000000,
             'epsilon_min': 0.01,
             'epsilon_max': 1.,
-            'epsilon_decay_period': 5000,
-            'epsilon_delay_decay': 50,
-            'batch_size': 200,
+            'epsilon_decay_period': 10000,
+            'epsilon_delay_decay': 400,
+            'batch_size': 1024,
             'gradient_steps': 2,
             'update_target_strategy': 'ema', # or 'ema'
-            'update_target_freq': 50,
+            'update_target_freq': 100,
             'update_target_tau': 0.005,
             'criterion': torch.nn.SmoothL1Loss(),
-            'monitoring_nb_trials': 50}
-
+            'monitoring_nb_trials': 20}
+    
     agent = DQNAgent(config, MLP)
+
+    print(device)
 
     print("Filling the buffer")
     fill_buffer(env, agent, 8000)
 
     print("Training the agent")
-    ep_length, disc_rewards, tot_rewards, V0 = agent.train(env, 500)
+    ep_length, disc_rewards, tot_rewards, V0 = agent.train(env, 20)
 
