@@ -182,9 +182,18 @@ class DQNAgent:
             # next transition
             step += 1
             if done or trunc:
+
+                if episode > 0:
+                        if episode_cum_reward > best_return:
+                            best_return = episode_cum_reward
+                            self.save(episode)
+                else:
+                        best_return = episode_cum_reward
+                        self.save(episode)
+
+
                 episode += 1
 
-                validation_score = evaluate_HIV(agent=self, nb_episode=1)
 
                 # Monitoring
                 if self.monitoring_nb_trials>0:
@@ -210,10 +219,7 @@ class DQNAgent:
                           ", ep return ", '{:4.1f}'.format(episode_cum_reward), 
                           sep='')
                     
-                if validation_score > best_return:
-                    print('New best policy found')
-                    best_return = validation_score
-                    self.save(episode)
+                
 
                 
                 state, _ = env.reset()
@@ -224,7 +230,7 @@ class DQNAgent:
         return episode_return, MC_avg_discounted_reward, MC_avg_total_reward, V_init_state
 
     def save(self, episode):
-        torch.save(self.model.state_dict(), 'src/models/model_{:e}'.format(episode))
+        torch.save(self.model.state_dict(), 'src/models_best/model_{:e}'.format(episode))
         
     def load(self, model_path):
         self.model.load_state_dict(torch.load(model_path,  map_location=torch.device('cpu')))
@@ -265,7 +271,7 @@ class ProjectAgent:
         pass
         
     def load(self):
-        self.agent.load("model_6")
+        self.agent.load("model_5")
 
 def fill_buffer(env, agent, buffer_size):
     state, _ = env.reset()
@@ -277,4 +283,5 @@ def fill_buffer(env, agent, buffer_size):
             state, _ = env.reset()
         else:
             state = next_state
+
 
