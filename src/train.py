@@ -271,7 +271,7 @@ class ProjectAgent:
         pass
         
     def load(self):
-        self.agent.load("model_167")
+        self.agent.load("model_last")
 
 def fill_buffer(env, agent, buffer_size):
     state, _ = env.reset()
