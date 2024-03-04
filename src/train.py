@@ -151,19 +151,24 @@ class DQNAgent:
         epsilon = self.epsilon_max
         step = 0
         best_return = 0
+
         while episode < max_episode:
+
             # update epsilon
             if step > self.epsilon_delay:
                 epsilon = max(self.epsilon_min, epsilon-self.epsilon_step)
+
             # select epsilon-greedy action
             if np.random.rand() < epsilon:
                 action = env.action_space.sample()
             else:
                 action = greedy_action(self.model, state)
+
             # step
             next_state, reward, done, trunc, _ = env.step(action)
             self.memory.append(state, action, reward, next_state, done)
             episode_cum_reward += reward
+
             # train
             for _ in range(self.nb_gradient_steps): 
                 self.gradient_step()
@@ -191,9 +196,7 @@ class DQNAgent:
                         best_return = episode_cum_reward
                         self.save(episode)
 
-
                 episode += 1
-
 
                 # Monitoring
                 if self.monitoring_nb_trials>0:
@@ -218,8 +221,7 @@ class DQNAgent:
                           ", batch size ", '{:4d}'.format(len(self.memory)), 
                           ", ep return ", '{:4.1f}'.format(episode_cum_reward), 
                           sep='')
-                    
-                
+
 
                 
                 state, _ = env.reset()
@@ -240,7 +242,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 state_dim = env.observation_space.shape[0]
 nb_actions = env.action_space.n
 
-MLP = MLP(state_dim, 256, nb_actions, depth=4, activation=torch.nn.ReLU(), normalization='None').to(device)
+MLP = MLP(state_dim, 256, nb_actions, depth=5, activation=torch.nn.ReLU(), normalization='None').to(device)
 
 class ProjectAgent:
     def __init__(self):
@@ -248,18 +250,18 @@ class ProjectAgent:
         self.config = {'nb_actions': nb_actions,
             'learning_rate': 0.001,
             'gamma': 0.98,
-            'buffer_size': 1000000,
+            'buffer_size': int(10e20),
             'epsilon_min': 0.01,
             'epsilon_max': 1.,
             'epsilon_decay_period': 10000,
-            'epsilon_delay_decay': 400,
-            'batch_size': 256,
+            'epsilon_delay_decay': 2000,
+            'batch_size': 1024,
             'gradient_steps': 40,
             'update_target_strategy': 'replace', # or 'ema'
             'update_target_freq': 100,
             'update_target_tau': 0.005,
-            'criterion': torch.nn.SmoothL1Loss(),
-            'monitoring_nb_trials': 5}
+            'criterion': torch.nn.SmoothL1Loss(reduction="mean"),
+            'monitoring_nb_trials': 0}
         
         self.agent = DQNAgent(self.config, self.model)
 
@@ -271,7 +273,7 @@ class ProjectAgent:
         pass
         
     def load(self):
-        self.agent.load("model_5")
+        self.agent.load("model_best")
 
 def fill_buffer(env, agent, buffer_size):
     state, _ = env.reset()
